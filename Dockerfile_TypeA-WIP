@@ -1,0 +1,64 @@
+FROM phpdaily/php:7.4.0-dev
+
+#ARG VER_TF='1.8.0'
+#ARG NAME_ARCHIVE_TF="v${VER_TF}.tar.gz"
+#ARG URL_SOURCE_TF="https://github.com/tensorflow/tensorflow/archive/${NAME_ARCHIVE_TF}"
+#ARG URL_BIN_TF="https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-${NAME_ARCHIVE_TF}.tar.gz"
+
+ENV VER_TF='1.8.0'
+ENV NAME_ARCHIVE_SOURCE_TF="v${VER_TF}.tar.gz"
+ENV NAME_ARCHIVE_BIN_TF="libtensorflow-cpu-linux-x86_64-${VER_TF}.tar.gz"
+ENV URL_SOURCE_TF="https://github.com/tensorflow/tensorflow/archive/${NAME_ARCHIVE_SOURCE_TF}"
+ENV URL_BIN_TF="https://storage.googleapis.com/tensorflow/libtensorflow/${NAME_ARCHIVE_BIN_TF}"
+ENV LD_LIBRARY_PATH=/usr/local/lib/
+
+RUN apk add --no-cache --virtual .persistent-deps \
+      libffi-dev \
+# loading shared library ld-linux-x86-64.so.2
+      libc6-compat \
+# loading shared library libgcc_s.so.1
+# loading shared library libstdc++.so.6
+      libstdc++
+RUN \
+    echo 'Building FFI PHP extension. (This will take a while)' && \
+    docker-php-ext-configure ffi --with-ffi && \
+    docker-php-ext-install ffi
+
+WORKDIR /home/www-data
+USER www-data
+
+RUN \
+    mkdir /home/www-data/src && \
+    cd /home/www-data/src && \
+    curl -SL -O $URL_SOURCE_TF && \
+    tar -xzf $NAME_ARCHIVE_SOURCE_TF
+
+RUN \
+    git clone https://github.com/dstogov/php-tensorflow.git /home/www-data/php-tf
+
+#/usr/lib/libtensorflow_framework.so
+#/usr/lib/libtensorflow.so
+#Error loading shared library libstdc++.so.6: No such file or directory (needed by libtensorflow.so)
+#Error loading shared library libgcc_s.so.1: No such file or directory (needed by libtensorflow.so)
+#	libc.so.6 => ldd (0x7fea0c5ca000)
+#Error loading shared library ld-linux-x86-64.so.2: No such file or directory (needed by libtensorflow.so)
+#Error loading shared library libstdc++.so.6: No such file or directory (needed by .//libtensorflow_framework.so)
+#Error loading shared library libgcc_s.so.1: No such file or directory (needed by .//libtensorflow_framework.so)
+#Error loading shared library ld-linux-x86-64.so.2: No such file or directory (needed by .//libtensorflow_framework.so)
+
+
+WORKDIR /home/www-data
+USER root
+
+RUN \
+    mkdir /home/www-data/bin && \
+    cd /home/www-data/bin && \
+    curl -SL -O $URL_BIN_TF && \
+    tar -xz -C $LD_LIBRARY_PATH -f $NAME_ARCHIVE_BIN_TF && \
+    ldconfig -n $LD_LIBRARY_PATH
+
+WORKDIR /home/www-data
+USER www-data
+
+COPY ./show_extensions.php /home/www-data
+CMD [ "./show_extensions.php" ]
